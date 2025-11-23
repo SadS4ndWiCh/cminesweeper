@@ -36,8 +36,12 @@ typedef struct {
 #define TILE_OPEN 1 << 1
 #define TILE_FLAG 1 << 2
 #define TILE_METADATA (TILE_BOMB | TILE_OPEN | TILE_FLAG)
+
 #define GET_TILE_RESERVED(tile) (tile >> 3)
 #define SET_TILE_RESERVED(tile, value) ((tile & TILE_METADATA) | (value << 3))
+
+#define ACTION_REVEAL 'O'
+#define ACTION_TOGGLE_FLAG 'F'
 
 typedef struct {
     size_t width;
@@ -45,10 +49,12 @@ typedef struct {
     char* items;
 } grid_t;
 
-void Input_getCoord(size_t* x, size_t* y);
+void Input_getAction(size_t* x, size_t* y, char* action);
 
 int Grid_new(grid_t* grid, size_t width, size_t height, size_t bombs);
-int Grid_getNeighbors(grid_t grid, size_t x, size_t y, neighbors_t* neighbors);
+void Grid_getNeighbors(grid_t grid, size_t x, size_t y, neighbors_t* neighbors);
+void Grid_floodfill(grid_t grid, size_t x, size_t y);
+void Grid_toggleFlag(grid_t grid, size_t x, size_t y);
 void Grid_render(grid_t grid);
 
 int Grid_new(grid_t* grid, size_t width, size_t height, size_t bombs) {
@@ -95,7 +101,7 @@ int Grid_new(grid_t* grid, size_t width, size_t height, size_t bombs) {
     return 0;
 }
 
-int Grid_getNeighbors(grid_t grid, size_t x, size_t y, neighbors_t* neighbors) {
+void Grid_getNeighbors(grid_t grid, size_t x, size_t y, neighbors_t* neighbors) {
     for (int dy = -1; dy <= 1; dy++) {
         for (int dx = -1; dx <= 1; dx++) {
             if (dx == 0 && dy == 0) {
@@ -112,15 +118,13 @@ int Grid_getNeighbors(grid_t grid, size_t x, size_t y, neighbors_t* neighbors) {
             neighbors->items[neighbors->count++] = (vec2) { nx, ny };
         }
     }
-
-    return 0;
 }
 
-void Input_getCoord(size_t* x, size_t* y) {
+void Input_getAction(size_t* x, size_t* y, char* action) {
     static char buf[INPUT_BUFFER] = {0};
 
     fgets(buf, sizeof(buf), stdin);
-    sscanf(buf, "%lu %lu", x, y);
+    sscanf(buf, "%lu %lu %c", x, y, action);
 }
 
 void Grid_render(grid_t grid) {
@@ -128,10 +132,12 @@ void Grid_render(grid_t grid) {
         for (size_t x = 0; x < grid.width; ++x) {
             int tile = grid.items[INDEX(x, y)];
 
-            if (!(tile & TILE_OPEN)) {
+            if (!(tile & TILE_OPEN) && tile & TILE_FLAG) {
+                printf("[F]");
+            } else if (!(tile & TILE_OPEN)) {
                 printf("[@]");
             } else if (tile & TILE_BOMB) {
-                printf("[O]");
+                printf("[*]");
             } else {
                 char reserved = GET_TILE_RESERVED(tile);
                 if (reserved > 0) {
@@ -146,18 +152,18 @@ void Grid_render(grid_t grid) {
     }
 }
 
-void Grid_floodfill(grid_t* grid, size_t x, size_t y) {
+void Grid_floodfill(grid_t grid, size_t x, size_t y) {
     size_t index = INDEX(x, y);
-    int tile = grid->items[index];
-    if (tile & TILE_OPEN) {
+    int tile = grid.items[index];
+    if (tile & TILE_OPEN || tile & TILE_FLAG) {
         return;
     }
 
-    grid->items[index] |= TILE_OPEN;
+    grid.items[index] |= TILE_OPEN;
 
     if (!(tile & TILE_BOMB) && GET_TILE_RESERVED(tile) == 0) {
         neighbors_t neighbors = {0};
-        Grid_getNeighbors(*grid, x, y, &neighbors);
+        Grid_getNeighbors(grid, x, y, &neighbors);
 
         for (size_t i = 0; i < neighbors.count; i++) {
             vec2 neighborPos = neighbors.items[i];
@@ -167,10 +173,20 @@ void Grid_floodfill(grid_t* grid, size_t x, size_t y) {
     }
 }
 
+void Grid_toggleFlag(grid_t grid, size_t x, size_t y) {
+    char tile = grid.items[INDEX(x, y)];
+    if (tile & TILE_OPEN) {
+        return;
+    }
+
+     grid.items[INDEX(x, y)] ^= TILE_FLAG;
+}
+
 int main(void) {
     srand(time(NULL));
 
     size_t sx, sy;
+    char action;
 
     grid_t grid = {0};
     if (Grid_new(&grid, 10, 10, 10) != 0) {
@@ -181,9 +197,16 @@ int main(void) {
     do {
         Grid_render(grid);
 
-        Input_getCoord(&sx, &sy);
+        Input_getAction(&sx, &sy, &action);
 
-        Grid_floodfill(&grid, sx, sy);
+        switch (action) {
+            case ACTION_REVEAL:
+                Grid_floodfill(grid, sx, sy);
+                break;
+            case ACTION_TOGGLE_FLAG:
+                Grid_toggleFlag(grid, sx, sy);
+                break;
+        }
     } while (1);
 
     return 0;

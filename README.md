@@ -42,7 +42,7 @@ total of bombs. The total of bombs uses only 4 bits.
 - [x] Implement floodfill
 - [x] Get user input
 - [x] Do floodfill in position
-- [ ] Toggle flag
+- [x] Toggle flag
 - [ ] Handle all user inputs
 - [ ] Show remaining bombs
 - [ ] Implement win and lost
